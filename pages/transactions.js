@@ -1,50 +1,62 @@
-import {useEffect,useState} from "react"
-import Link from "next/link"
-import AuthGuard from "../components/AuthGuard"
+import { useState } from "react"
+import { useTransactions } from "../context/TransactionContext"
 import Sidebar from "../components/Sidebar"
+import AuthGuard from "../components/AuthGuard"
+import Link from "next/link"
 
 export default function Transactions(){
 
-const [transactions,setTransactions]=useState([])
-const [search,setSearch]=useState("")
+const { transactions, loading } = useTransactions()
 
-async function load(){
+const [search,setSearch] = useState("")
+const [fromDate,setFromDate] = useState("")
+const [toDate,setToDate] = useState("")
 
-const r = await fetch("/api/transaction")
-const data = await r.json()
-
-setTransactions(data)
-
+if(loading){
+return(
+<AuthGuard>
+<div className="layout">
+<Sidebar/>
+<div className="main">
+<h2>Loading transactions...</h2>
+</div>
+</div>
+</AuthGuard>
+)
 }
 
-useEffect(()=>{
-load()
-},[])
+const safeTransactions = Array.isArray(transactions) ? transactions : []
 
-async function deleteTransaction(id){
+const filtered = safeTransactions.filter(t=>{
 
-await fetch("/api/transaction",{
-method:"POST",
-headers:{
-"Content-Type":"application/json"
-},
-body:JSON.stringify({
-action:"delete",
-id
-})
-})
-
-load()
-
-}
-
-const filtered = (Array.isArray(transactions) ? transactions : []).filter(t =>
-
-String(t.name || "")
+const nameMatch = String(t.name || "")
 .toLowerCase()
 .includes(search.toLowerCase())
 
-)
+const date = new Date(t.date)
+
+const fromMatch = fromDate ? date >= new Date(fromDate) : true
+const toMatch = toDate ? date <= new Date(toDate) : true
+
+return nameMatch && fromMatch && toMatch
+
+})
+
+async function deleteTransaction(id){
+
+if(!confirm("Delete this transaction?")) return
+
+await fetch("/api/transaction",{
+method:"DELETE",
+headers:{
+"Content-Type":"application/json"
+},
+body:JSON.stringify({id})
+})
+
+location.reload()
+
+}
 
 return(
 
@@ -58,18 +70,33 @@ return(
 
 <h1>Transactions</h1>
 
+<div className="filters">
+
 <input
-placeholder="Search buyer"
+type="text"
+placeholder="Search buyer..."
 value={search}
 onChange={(e)=>setSearch(e.target.value)}
 />
 
-<table>
+<input
+type="date"
+value={fromDate}
+onChange={(e)=>setFromDate(e.target.value)}
+/>
+
+<input
+type="date"
+value={toDate}
+onChange={(e)=>setToDate(e.target.value)}
+/>
+
+</div>
+
+<table className="table">
 
 <thead>
-
 <tr>
-
 <th>Date</th>
 <th>Partner</th>
 <th>Type</th>
@@ -79,9 +106,7 @@ onChange={(e)=>setSearch(e.target.value)}
 <th>Amount</th>
 <th>Notes</th>
 <th>Action</th>
-
 </tr>
-
 </thead>
 
 <tbody>
@@ -102,10 +127,13 @@ onChange={(e)=>setSearch(e.target.value)}
 <td>
 
 <Link href={`/edit-transaction?id=${t.id}`}>
-<button>Edit</button>
+<button className="btn-edit">Edit</button>
 </Link>
 
-<button onClick={()=>deleteTransaction(t.id)}>
+<button
+className="btn-delete"
+onClick={()=>deleteTransaction(t.id)}
+>
 Delete
 </button>
 
